@@ -54,7 +54,7 @@ export enum {{jsid $model.Name}} {
     {{- end}}
      */
     {{- end}}
-    {{jsid $value.Name}} = {{jsvalue $value.Value}},
+    {{jsid (fixenum $model.Name $value.Name)}} = {{jsvalue $value.Value}},
     {{- end}}{{end}}{{end}}
 };
 {{else if $info.IsClassAlias}}
