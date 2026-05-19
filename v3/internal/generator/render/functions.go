@@ -28,6 +28,7 @@ var tmplFunctions = template.FuncMap{
 	"modelinfo":  modelinfo,
 	"typeparam":  typeparam,
 	"unalias":    types.Unalias,
+	"fixenum":    fixenumname,
 }
 
 // fixext replaces a *.ts extension with *.js in the given string.
@@ -104,4 +105,12 @@ func istpalias(typ types.Type) bool {
 	}
 
 	return false
+}
+
+func fixenumname(modelName, valueName string) string {
+	newName := strings.TrimPrefix(valueName, modelName)
+	if newName == "" {
+		return valueName
+	}
+	return newName
 }
