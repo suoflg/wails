@@ -21,7 +21,7 @@
 - (WebviewWindow*) initWithContentRect:(NSRect)contentRect styleMask:(NSUInteger)windowStyle backing:(NSBackingStoreType)bufferingType defer:(BOOL)deferCreation;
 
 @property (assign) WKWebView* webView; // We already retain WKWebView since it's part of the Window.
-@property BOOL disableEscapeExitsFullscreen;
+@property (nonatomic) BOOL disableEscapeExitsFullscreen;
 
 @end
 

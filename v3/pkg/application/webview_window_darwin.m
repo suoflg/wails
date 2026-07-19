@@ -20,7 +20,6 @@ typedef NS_ENUM(NSInteger, MacLiquidGlassStyle) {
     LiquidGlassStyleDark = 2,
     LiquidGlassStyleVibrant = 3
 };
-
 @interface WebviewWindow ()
 
 @property (retain) NSTimer* zoomAnimationTimer;
@@ -36,6 +35,7 @@ typedef NS_ENUM(NSInteger, MacLiquidGlassStyle) {
 @property BOOL applyingZoomAnimationFrame;
 @property NSRect zoomRestoreFrame;
 @property BOOL hasZoomRestoreFrame;
+@property (retain) id escapeMonitor;
 
 - (void)stepZoomAnimationAtTime:(CFTimeInterval)time;
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 140000
@@ -43,7 +43,6 @@ typedef NS_ENUM(NSInteger, MacLiquidGlassStyle) {
 #endif
 
 @end
-
 NSString* keyStringFromKeyEvent(NSEvent* event) {
     return [WebviewWindow keyStringFromEvent:event];
 }
@@ -489,6 +488,50 @@ BOOL dispatchKeyEquivalent(NSEvent* event, NSWindow* window) {
 
     [self startZoomAnimationDriver];
 }
+// Override setDisableEscapeExitsFullscreen: to add/remove a local event monitor.
+// WKWebView has its own internal fullscreen-ESC handling that bypasses the
+// AppKit responder chain entirely (cancel:/cancelOperation: overrides have
+// no effect). A local event monitor fires before events reach WKWebView.
+// We consume the native ESC and inject a synthetic JS KeyboardEvent instead,
+// so web content still receives ESC without triggering native fullscreen exit.
+- (void)setDisableEscapeExitsFullscreen:(BOOL)disable {
+    _disableEscapeExitsFullscreen = disable;
+    if (disable) {
+        if (!self.escapeMonitor) {
+            __unsafe_unretained WebviewWindow *weakSelf = self;
+            self.escapeMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent * _Nullable(NSEvent * _Nonnull event) {
+                WebviewWindow *strongSelf = weakSelf;
+                if (!strongSelf) return event;
+                BOOL isFullscreen = (strongSelf.styleMask & NSWindowStyleMaskFullScreen) == NSWindowStyleMaskFullScreen;
+                if (event.keyCode == 53 && isFullscreen) {
+                    // We cannot dispatch native keyDown to WKWebView because
+                    // WKWebView handles ESC internally via WebKit's own fullscreen
+                    // mechanism — it bypasses the AppKit responder chain entirely
+                    // (cancel:/cancelOperation: overrides have no effect). Instead
+                    // inject a synthetic KeyboardEvent via JavaScript so the web
+                    // content still receives ESC without triggering native exit.
+                    if (strongSelf.webView) {
+                        [strongSelf.webView evaluateJavaScript:
+                            @"(function(){"
+                            @"var kd=new KeyboardEvent('keydown',{key:'Escape',code:'Escape',keyCode:27,which:27,bubbles:true,cancelable:true});"
+                            @"var ku=new KeyboardEvent('keyup',{key:'Escape',code:'Escape',keyCode:27,which:27,bubbles:true,cancelable:true});"
+                            @"var t=document.activeElement||document;"
+                            @"t.dispatchEvent(kd);"
+                            @"t.dispatchEvent(ku);"
+                            @"})()" completionHandler:nil];
+                    }
+                    return nil; // Consume native event
+                }
+                return event;
+            }];
+        }
+    } else {
+        if (self.escapeMonitor) {
+            [NSEvent removeMonitor:self.escapeMonitor];
+            self.escapeMonitor = nil;
+        }
+    }
+}
 - (void) setDelegate:(id<NSWindowDelegate>) delegate {
     [delegate retain];
     [super setDelegate: delegate];
@@ -503,6 +546,11 @@ BOOL dispatchKeyEquivalent(NSEvent* event, NSWindow* window) {
 }
 - (void) dealloc {
     [self cancelZoomAnimation];
+    // Remove the escape monitor if active
+    if (self.escapeMonitor) {
+        [NSEvent removeMonitor:self.escapeMonitor];
+        self.escapeMonitor = nil;
+    }
     // Remove the script handler, otherwise WebviewWindowDelegate won't get deallocated
     // See: https://stackoverflow.com/questions/26383031/wkwebview-causes-my-view-controller-to-leak
     [self.webView.configuration.userContentController removeScriptMessageHandlerForName:@"external"];
