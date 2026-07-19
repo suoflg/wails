@@ -8,7 +8,7 @@
 
 @protocol WailsWebviewWindow <NSObject>
 @property (assign) WKWebView* webView;
-@property BOOL disableEscapeExitsFullscreen;
+@property (nonatomic) BOOL disableEscapeExitsFullscreen;
 @end
 
 @interface WebviewWindow : NSWindow <WailsWebviewWindow>

@@ -13,7 +13,7 @@
 - (BOOL)resignFirstResponder;
 
 @property (assign) WKWebView* webView;
-@property BOOL disableEscapeExitsFullscreen;
+@property (nonatomic) BOOL disableEscapeExitsFullscreen;
 
 @end
 
